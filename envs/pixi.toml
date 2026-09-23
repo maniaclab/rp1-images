@@ -1,0 +1,106 @@
+# One pixi workspace, one lock, for every pixi-built image here
+# (images/base, images/coffea). Each image installs one environment with
+# `pixi install --locked -e <name>`.
+#
+# All environments share one solve-group, so any package two images both
+# carry resolves to the same version in both. That guarantee matters most
+# for the platform feature below, whose versions are coupled to services
+# rp1-core deploys.
+[workspace]
+name = "rp1-images"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+requires-pixi = ">=0.81"
+
+# --- platform --------------------------------------------------------------
+# Coupled to services rp1-core runs. Change these only together with the
+# matching rp1-core change, never through an unreviewed bot bump.
+[feature.platform.dependencies]
+python = "3.12.*"
+# Must match the dask-gateway Helm chart version in rp1-core
+# (infrastructure/dask-gateway/helmrelease.yaml).
+dask-gateway = "==2026.3.0"
+# Must match the taskvine-gateway worker image (worker/pixi.toml in
+# maniaclab/taskvine-gateway). TaskVine rejects workers speaking another
+# protocol version.
+ndcctools = "==7.17.1"
+# Same major as ODF's hub (z2jh 4.x runs JupyterHub 5).
+jupyterhub-singleuser = "5.*"
+# Both challenge repos pin xrootd <6; 6.x is a new major.
+xrootd = ">=5.8,<6"
+fsspec-xrootd = "*"
+
+[feature.platform.pypi-dependencies]
+# The client is stdlib-only and doesn't publish releases yet. Pinned to the
+# same commit as rp1-core's infrastructure/taskvine-gateway/gitrepo.yaml.
+taskvine-gateway = { git = "https://github.com/maniaclab/taskvine-gateway", rev = "4ad5d3d7ccdff3b5146f2afceb5fd9f084877343" }
+
+# --- notebook --------------------------------------------------------------
+# The Jupyter server side and the Dask runtime. Not coupled to the cluster
+# beyond platform: notebook, scheduler and workers all run the same image,
+# so whatever dask/distributed resolves to is shared by all three.
+[feature.notebook.dependencies]
+jupyterlab = "4.*"
+notebook = "7.*"
+ipykernel = "*"
+ipywidgets = "*"
+dask = "*"
+distributed = "*"
+bokeh = "*"           # Dask dashboard
+dask-labextension = "*"
+pip = "*"
+tini = "*"            # the images' PID 1 (ENTRYPOINT), so it's locked with everything else
+
+# --- coffea ----------------------------------------------------------------
+# Columnar analysis stack for the IRIS-HEP challenges:
+#   iris-hep/integration-challenge atlas/ + cms/, analysis-grand-challenge "latest".
+# Exact pins are what integration-challenge/cms/pixi.lock resolved (commit
+# f6cd7e1, 2026-09-05), the strictest of the three, so those notebooks run
+# unmodified. Loose entries are left unpinned there or used by only one.
+[feature.coffea.dependencies]
+dask = "==2025.3.1"
+distributed = "==2025.3.1"
+coffea = "==2025.12.0"
+awkward = "==2.9.0"
+dask-awkward = "==2025.9.0"
+dask-histogram = "==2025.2.0"
+uproot = "==5.7.1"
+vector = "==1.5.1"
+numba = "==0.61.2"
+numpy = "==2.2.6"
+correctionlib = "==2.7.0"
+hist = "==2.10.1"
+mplhep = "==0.4.1"
+cabinetry = "==0.6.0"
+pyhf = "==0.7.6"
+iminuit = "*"
+servicex = "*"
+servicex-analysis-utils = "*"
+atlas-schema = "==0.4.1"
+atlasopenmagic = "*"
+cramjam = "*"
+xrootd = "==5.9.1"
+fsspec-xrootd = "==0.5.2"
+# Histogramming-as-a-service client, matched to ODF's histserv server
+# (rp1-core infrastructure/histserv/pixi.toml), not the older 0.1.3 the
+# integration-challenge README pins.
+histserv = "==0.2.1"
+scikit-learn = "==1.8.0"
+# CPU build. The plain xgboost package resolves to a CUDA variant and pulls
+# in the CUDA runtime, and ODF has no GPUs yet.
+py-xgboost-cpu = "*"
+omegaconf = "==2.3.0"
+pydantic = "==2.12.5"
+pandas = "*"
+scipy = "*"
+rich = "*"
+tabulate = "*"
+tqdm = "*"
+cloudpickle = "*"
+
+[feature.coffea.pypi-dependencies]
+roastcoffea = "==0.1.2"  # not on conda-forge
+
+[environments]
+base = { features = ["platform", "notebook"], solve-group = "images" }
+coffea = { features = ["platform", "notebook", "coffea"], solve-group = "images" }

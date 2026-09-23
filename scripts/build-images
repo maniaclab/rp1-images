@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Builds and smoke-tests every image whose tag isn't in the registry yet, in
+# dependency order, and pushes them with --push (CI does this on main only).
+#
+#   scripts/build-images           # build + test changed images locally
+#   scripts/build-images --push    # ...and push them (plus move :latest)
+#
+# Tags are content-addressed (scripts/image-tag), so "tag already in the
+# registry" means "none of the image's inputs changed" and the image is
+# skipped. Images are built sequentially with plain `docker build` from the
+# repository root, so an image built FROM another one here would build on
+# the just-built local parent before either has been pushed.
+set -euo pipefail
+
+# Parents before children.
+IMAGES=(hub base opendata coffea)
+
+PUSH=false
+[ "${1:-}" = "--push" ] && PUSH=true
+
+cd "$(git rev-parse --show-toplevel)"
+REPO="${IMAGE_REPO:-ghcr.io/maniaclab/rp1-images}"
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+tree_tag() { scripts/image-tag "$1"; }
+
+for name in "${IMAGES[@]}"; do
+    dir="images/$name"
+    tag="$(tree_tag "$name")"
+    ref="$REPO/$name:$tag"
+
+    # An in-repo FROM must point at its parent's *current* tag, or the child
+    # silently builds on a stale parent.
+    for parent_ref in $(grep -oE "$REPO/[a-z0-9-]+:tree-[0-9a-f]+" "$dir/Dockerfile" || true); do
+        parent="${parent_ref#"$REPO"/}"; parent="${parent%%:*}"
+        want="$(tree_tag "$parent")"
+        if [ "${parent_ref##*:}" != "$want" ]; then
+            echo "::error file=$dir/Dockerfile::FROM $parent_ref is stale; images/$parent is now $want (scripts/image-tag $parent)"
+            exit 1
+        fi
+    done
+
+    if docker manifest inspect "$ref" >/dev/null 2>&1; then
+        echo "== $name: $ref already published, skipping"
+        built=false
+    else
+        echo "== $name: building $ref"
+        docker build --pull=false \
+            --build-arg BUILD_DATE="$BUILD_DATE" \
+            --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY:-maniaclab/rp1-images}" \
+            --label org.opencontainers.image.revision="$(git rev-parse HEAD)" \
+            --label org.opencontainers.image.created="$BUILD_DATE" \
+            -f "$dir/Dockerfile" -t "$ref" .
+
+        echo "== $name: smoke test"
+        docker run --rm -v "$PWD/$dir/smoke-test.py:/tmp/smoke-test.py:ro" "$ref" python /tmp/smoke-test.py
+        built=true
+    fi
+
+    if $PUSH; then
+        $built && docker push "$ref"
+        docker buildx imagetools create -t "$REPO/$name:latest" "$ref"
+    fi
+done

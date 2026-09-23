@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Prints the tag CI publishes for an image: tree-<hash of its inputs>.
+#
+# An image's inputs are images/<name>/, plus envs/ (the shared pixi
+# workspace and lock) if its Dockerfile copies from it. For an image with
+# only its own directory, the hash is that directory's git tree hash.
+# Otherwise it's a hash over the input trees. Either way it depends only on
+# content, so a consumer (rp1-core) can pin a tag before CI builds it.
+#
+# Reads the index (staged content), so `git add` first. In CI the index
+# equals HEAD.
+#
+#   scripts/image-tag coffea    ->  tree-3f9c...
+set -euo pipefail
+name="${1:?usage: image-tag <image-name>}"
+cd "$(git rev-parse --show-toplevel)"
+[ -d "images/$name" ] || { echo "no such image: images/$name" >&2; exit 1; }
+
+trees="$(git write-tree --prefix="images/$name/")"
+if grep -qE '^\s*COPY\s+(--\S+\s+)*envs/' "images/$name/Dockerfile"; then
+    trees="$trees envs:$(git write-tree --prefix=envs/)"
+    echo "tree-$(printf '%s' "$trees" | git hash-object --stdin)"
+else
+    echo "tree-$trees"
+fi
