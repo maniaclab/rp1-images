@@ -12,6 +12,11 @@ FROM ghcr.io/prefix-dev/pixi:0.81.0-noble@sha256:788ae451641666e2d1f79d3dbe35392
 ARG ENV_NAME
 # A conda prefix isn't relocatable, so install at the exact path the final
 # image uses.
+# git: pixi fetches git-sourced PyPI dependencies (taskvine-gateway) with the
+# system git, which the pixi image doesn't ship.
+RUN apt-get update >/dev/null \
+    && apt-get install --yes --no-install-recommends git ca-certificates >/dev/null \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/rp1
 COPY envs/pixi.toml envs/pixi.lock ./
 RUN pixi install --locked -e "${ENV_NAME}" \
