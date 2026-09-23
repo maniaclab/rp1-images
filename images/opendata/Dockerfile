@@ -22,3 +22,13 @@ RUN mamba install -y -n base -c conda-forge --freeze-installed \
 
 RUN pip install --no-cache-dir \
         "taskvine-gateway @ git+https://github.com/maniaclab/taskvine-gateway@4ad5d3d7ccdff3b5146f2afceb5fd9f084877343"
+
+# Upstream mixes conda packages with pip wheels in one env. Wheels (numpy,
+# pandas, ...) link the system libstdc++ (Ubuntu 22.04: GCC 12), while conda's
+# libarrow/pyarrow need conda's newer one (CXXABI_1.3.15). Whichever loads
+# first wins for the whole process. Jupyter kernels happen to load conda's
+# first (via pyzmq), but a plain `python` or `dask-worker` imports a numpy
+# wheel first, and `import pyarrow` (awkward, uproot) then fails. Preloading
+# conda's libstdc++ fixes every process; it's a superset of the system one,
+# so wheels and system tools keep working.
+ENV LD_PRELOAD=/opt/conda/lib/libstdc++.so.6

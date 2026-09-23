@@ -4,7 +4,9 @@ import dask, distributed, dask_gateway, ndcctools.taskvine, taskvine_gateway
 
 print("dask", dask.__version__, "distributed", distributed.__version__, "dask_gateway", dask_gateway.__version__)
 
-# Upstream's own analysis stack must survive the install above.
+# Upstream's own analysis stack must survive the install above. This runs
+# in a plain `python` process, as Dask workers do, so it also catches the
+# libstdc++ load-order problem LD_PRELOAD in the Dockerfile fixes.
 import uproot, awkward, coffea, atlasopenmagic, ROOT
 print("uproot", uproot.__version__, "coffea", coffea.__version__)
 
