@@ -12,3 +12,12 @@ for m in (dask, distributed, coffea, awkward, dask_awkward, uproot, vector, numb
 import shutil
 missing = [c for c in ("dask-scheduler", "dask-worker") if not shutil.which(c)]
 assert not missing, f"missing on PATH: {missing}"
+
+# The Dask JupyterLab extension (sidebar, dashboard panes) must be installed
+# and enabled in the image's JupyterLab.
+import subprocess
+out = subprocess.run(["jupyter", "labextension", "list"], capture_output=True, text=True)
+listing = out.stdout + out.stderr
+line = next((l for l in listing.splitlines() if "dask-labextension" in l), "")
+assert "enabled" in line and "OK" in line, f"dask-labextension not enabled:\n{listing}"
+print(line.strip())
