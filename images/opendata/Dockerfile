@@ -20,8 +20,13 @@ RUN mamba install -y -n base -c conda-forge --freeze-installed \
         "ndcctools==7.17.1" \
     && mamba clean -afy
 
+# pip rather than mamba for dask-labextension: upstream's JupyterLab stack
+# (jupyter, notebook) is pip-installed, so pip sees what's already there and
+# mamba would install a second, conda JupyterLab beside it. Pinned to the
+# version the pixi images lock.
 RUN pip install --no-cache-dir \
-        "taskvine-gateway @ git+https://github.com/maniaclab/taskvine-gateway@4ad5d3d7ccdff3b5146f2afceb5fd9f084877343"
+        "taskvine-gateway @ git+https://github.com/maniaclab/taskvine-gateway@4ad5d3d7ccdff3b5146f2afceb5fd9f084877343" \
+        "dask-labextension==7.0.0"
 
 # Upstream mixes conda packages with pip wheels in one env. Wheels (numpy,
 # pandas, ...) link the system libstdc++ (Ubuntu 22.04: GCC 12), while conda's
